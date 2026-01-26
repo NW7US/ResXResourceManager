@@ -3,6 +3,7 @@
     <TargetFramework>net472</TargetFramework>
     <IsPackable>false</IsPackable>
     <UseWPF>true</UseWPF>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <PropertyGroup Label="License">
@@ -15,8 +16,8 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="TomsToolbox.Essentials" />
     <PackageReference Include="TomsToolbox.Composition" />
-    <PackageReference Include="Verify.Xunit" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="Verify.XunitV3" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 

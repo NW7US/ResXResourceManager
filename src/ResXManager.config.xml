@@ -2,4 +2,4 @@
 <Values xmlns="urn:tom-englert.de/Configuration/1/0">
   <Value Key="FileExclusionFilter">MyProject|Lcid|XlfSync</Value>
   <Value Key="CodeReferences">{"Items":[{"Expression":"\\W($File.$Key)\\W","Extensions":".cs,.xaml,.cshtml","IsCaseSensitive":true,"SingleLineComment":"\/\/"},{"Expression":"StringResourceKey\\.($Key)","Extensions":".cs","IsCaseSensitive":true,"SingleLineComment":"\/\/"},{"Expression":"($Key)","Extensions":".ts,.html","IsCaseSensitive":true,"SingleLineComment":"\/\/"}]}</Value>
-</Values>
+<Value Key="TaskErrorCategory">Message</Value></Values>
