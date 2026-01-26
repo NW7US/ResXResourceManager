@@ -17,29 +17,14 @@ using ResXManager.Infrastructure;
 using TomsToolbox.Essentials;
 using JsonConvert = Newtonsoft.Json.JsonConvert;
 
-#pragma warning disable CA1305
-#pragma warning disable IDE0057
-#pragma warning disable CA1865
-
 [Export(typeof(ITranslator)), Shared]
-public class OpenAITranslator : TranslatorBase
+public sealed class OpenAITranslator() : TranslatorBase("OpenAI", "OpenAI", new Uri("https://openai.com/api/"), GetCredentials()), IDisposable
 {
-    private HttpClient _sharedClient = new();
     private readonly SemaphoreSlim _rateLimitSemaphore = new(1, 1);
-    private TiktokenTokenizer? _cachedTokenizer;
-    private DateTime _minuteStartTime = DateTime.UtcNow;
-    private SemaphoreSlim? _throttler;
-    private int _tokenPerMinute;
-    private int _tokensUsedThisMinute;
 
-    public OpenAITranslator()
-        : base(
-            "OpenAI", "OpenAI",
-            new Uri("https://openai.com/api/"),
-            GetCredentials()
-        )
-    {
-    }
+    private DateTime _tokensCounterStartTime = DateTime.UtcNow;
+    private int _tokenLimitPerMinute;
+    private int _tokensUsedThisMinute;
 
     [DataMember]
     public bool CountTokens { get; set; } = true;
@@ -92,19 +77,11 @@ public class OpenAITranslator : TranslatorBase
             input = "ping",
         };
 
-        using var content = new StringContent(
-            JsonConvert.SerializeObject(requestBody),
-            Encoding.UTF8,
-            "application/json"
-        );
+        using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
 
         try
         {
-            var response = await client.PostAsync(
-                "responses ",
-                content,
-                cancellationToken
-            ).ConfigureAwait(false);
+            var response = await client.PostAsync(new Uri("responses", UriKind.Relative), content, cancellationToken).ConfigureAwait(false);
 
             response.EnsureSuccessStatusCode();
 
@@ -136,15 +113,15 @@ public class OpenAITranslator : TranslatorBase
 
         if (ModelName.IsNullOrWhiteSpace())
         {
-            translationSession.AddMessage($"OpenAI Translator requires name of the model used in the deployment.");
+            translationSession.AddMessage("OpenAI Translator requires name of the model used in the deployment.");
             return;
         }
 
-        ConfigureSharedHttpClient();
+        using var client = ConfigureHttpClient();
 
         try
         {
-            _sharedClient.BaseAddress = new Uri(Url, UriKind.Absolute);
+            client.BaseAddress = new Uri(Url, UriKind.Absolute);
         }
         catch (Exception e) when (e is ArgumentNullException or ArgumentException or UriFormatException)
         {
@@ -153,18 +130,18 @@ public class OpenAITranslator : TranslatorBase
         }
 
         // Initialize token limit
-        var tpm = await GetTokenLimitPerMinuteAsync(_sharedClient, translationSession.CancellationToken);
+        var tpm = await GetTokenLimitPerMinuteAsync(client, translationSession.CancellationToken).ConfigureAwait(false);
         if (tpm == null)
         {
             translationSession.AddMessage("OpenAI Translator response with no token per minutes");
             return;
         }
 
-        _tokenPerMinute = (int)tpm;
-        _minuteStartTime = DateTime.UtcNow;
+        _tokenLimitPerMinute = (int)tpm;
+        _tokensCounterStartTime = DateTime.UtcNow;
         _tokensUsedThisMinute = 0;
 
-        await TranslateUsingCompletionsModelParallel(translationSession, _sharedClient).ConfigureAwait(false);
+        await TranslateUsingCompletionsModelParallel(translationSession, client).ConfigureAwait(false);
     }
 
     private static string? ExpandModelNameAliases(string? modelName)
@@ -187,17 +164,16 @@ public class OpenAITranslator : TranslatorBase
         ];
     }
 
-    private void ConfigureSharedHttpClient()
+    private HttpClient ConfigureHttpClient()
     {
-        var handler = new HttpClientHandler
-        {
-            MaxConnectionsPerServer = MaxParallelRequests
-        };
+#pragma warning disable CA2000 // HttpClient is disposed with the client
+        var client = new HttpClient(new HttpClientHandler { MaxConnectionsPerServer = MaxParallelRequests });
+#pragma warning restore CA2000
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {AuthenticationKey}");
+        client.Timeout = TimeSpan.FromMinutes(5);
 
-        _sharedClient = new HttpClient(handler);
-        _sharedClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _sharedClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {AuthenticationKey}");
-        _sharedClient.Timeout = TimeSpan.FromMinutes(5);
+        return client;
     }
 
     private string? GenerateCompletionModelPromptForTranslation(ITranslationSession translationSession, ITranslationItem translationItem)
@@ -224,7 +200,7 @@ public class OpenAITranslator : TranslatorBase
             .Where(item => !item.Comment.IsNullOrWhiteSpace())
             .ToArray();
 
-        if (IncludeCommentsInPrompt && allComments.Any())
+        if (IncludeCommentsInPrompt && allComments.Length > 0)
         {
             promptBuilder.Append("CONTEXT:\n");
             allComments
@@ -241,9 +217,7 @@ public class OpenAITranslator : TranslatorBase
         return promptBuilder.ToString();
     }
 
-    private IEnumerable<(ITranslationItem item, string prompt, int estimatedTokens)> PackCompletionModelPrompts(
-        ITranslationSession translationSession,
-        TiktokenTokenizer? tokenizer)
+    private IEnumerable<(ITranslationItem item, string prompt, int estimatedTokens)> PackCompletionModelPrompts(ITranslationSession translationSession, TiktokenTokenizer? tokenizer)
     {
         foreach (var item in translationSession.Items)
         {
@@ -269,11 +243,7 @@ public class OpenAITranslator : TranslatorBase
         }
     }
 
-    private async Task ProcessSingleBatch(
-        (ITranslationItem item, string prompt, int estimatedTokens) batch,
-        ITranslationSession translationSession,
-        HttpClient client,
-        CancellationToken cancellationToken)
+    private async Task ProcessSingleBatch((ITranslationItem item, string prompt, int estimatedTokens) batch, ITranslationSession translationSession, HttpClient client, CancellationToken cancellationToken)
     {
         var retries = 0;
         const int maxRetries = 5;
@@ -291,19 +261,11 @@ public class OpenAITranslator : TranslatorBase
                 temperature = Temperature
             };
 
-            using var content = new StringContent(
-                JsonConvert.SerializeObject(requestBody),
-                Encoding.UTF8,
-                "application/json"
-            );
+            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
 
             try
             {
-                var completionsResponse = await client.PostAsync(
-                   "responses",
-                    content,
-                    cancellationToken
-                ).ConfigureAwait(false);
+                var completionsResponse = await client.PostAsync(new Uri("responses", UriKind.Relative), content, cancellationToken).ConfigureAwait(false);
 
                 if (completionsResponse.StatusCode == (System.Net.HttpStatusCode)429)
                 {
@@ -318,19 +280,12 @@ public class OpenAITranslator : TranslatorBase
                 var responseContent = await completionsResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                 var root = JToken.Parse(responseContent);
 
-                var text =
-                    root["output"]?
-                        .First?["content"]?
-                        .First?["text"]?
-                        .ToString();
+                var text = root["output"]?.First?["content"]?.First?["text"]?.ToString();
 
                 if (string.IsNullOrWhiteSpace(text))
                     text = string.Empty;
 
-                await translationSession.MainThread.StartNew(() =>
-                    batch.item.Results.Add(new TranslationMatch(this, text, Ranking)),
-                    cancellationToken
-                ).ConfigureAwait(false);
+                await translationSession.MainThread.StartNew(() => batch.item.Results.Add(new TranslationMatch(this, text, Ranking)), cancellationToken).ConfigureAwait(false);
 
                 // Update token consumption
                 UpdateTokenUsage(batch.estimatedTokens + CompletionTokens);
@@ -352,20 +307,12 @@ public class OpenAITranslator : TranslatorBase
 
     private async Task TranslateUsingCompletionsModelParallel(ITranslationSession translationSession, HttpClient client)
     {
-        if (CountTokens && _cachedTokenizer == null)
-        {
-            _cachedTokenizer = TryCreateTokenizerForModel(ModelName);
-        }
+        var tokenizer = CountTokens ? TryCreateTokenizerForModel(ModelName) : null;
 
-        // Initialise or update throttlers if MaxParallelRequests has changed
-        if (_throttler == null || _throttler.CurrentCount != MaxParallelRequests)
-        {
-            _throttler?.Dispose();
-            _throttler = new SemaphoreSlim(MaxParallelRequests, MaxParallelRequests);
-        }
+        using var throttler = new SemaphoreSlim(MaxParallelRequests, MaxParallelRequests);
 
         var cancellationToken = translationSession.CancellationToken;
-        var batches = PackCompletionModelPrompts(translationSession, _cachedTokenizer).ToList();
+        var batches = PackCompletionModelPrompts(translationSession, tokenizer).ToList();
 
         // Parallel processing with SemaphoreSlim for control
         var tasks = new List<Task>();
@@ -377,7 +324,7 @@ public class OpenAITranslator : TranslatorBase
             if (string.IsNullOrWhiteSpace(batch.item.Source) || (batch.item.Source.Length == 1 && batch.item.Source.Contains("\u200B")))
                 continue;
 
-            await _throttler.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await throttler.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             var task = Task.Run(async () =>
             {
@@ -387,7 +334,8 @@ public class OpenAITranslator : TranslatorBase
                 }
                 finally
                 {
-                    _throttler.Release();
+                    // ReSharper disable once AccessToDisposedClosure
+                    throttler.Release();
                 }
             }, cancellationToken);
 
@@ -397,7 +345,7 @@ public class OpenAITranslator : TranslatorBase
         await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
-    private TiktokenTokenizer? TryCreateFallbackTokenizer()
+    private static TiktokenTokenizer? TryCreateFallbackTokenizer()
     {
         try
         {
@@ -412,7 +360,7 @@ public class OpenAITranslator : TranslatorBase
         }
     }
 
-    private TiktokenTokenizer? TryCreateTokenizerForModel(string? modelName)
+    private static TiktokenTokenizer? TryCreateTokenizerForModel(string? modelName)
     {
         if (string.IsNullOrWhiteSpace(modelName))
         {
@@ -435,39 +383,32 @@ public class OpenAITranslator : TranslatorBase
 
     private void UpdateTokenUsage(int tokens)
     {
-        _rateLimitSemaphore.Wait();
-        try
-        {
-            _tokensUsedThisMinute += tokens;
-        }
-        finally
-        {
-            _rateLimitSemaphore.Release();
-        }
+        Interlocked.Add(ref _tokensUsedThisMinute, tokens);
     }
 
     private async Task WaitForTokenAvailability(int requiredTokens, CancellationToken cancellationToken)
     {
-        if (_tokenPerMinute <= 0)
+        if (_tokenLimitPerMinute <= 0)
             return;
 
         await _rateLimitSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
         try
         {
             // Reset counter when one minute has elapsed
             var now = DateTime.UtcNow;
-            if ((now - _minuteStartTime).TotalMinutes >= 1)
+            if ((now - _tokensCounterStartTime).TotalMinutes >= 1)
             {
-                _minuteStartTime = now;
+                _tokensCounterStartTime = now;
                 _tokensUsedThisMinute = 0;
             }
 
             // Wait when limit is reached
-            System.Diagnostics.Debug.WriteLine($"_tokensUsedThisMinute {_tokensUsedThisMinute} from _tokenPerMinute {_tokenPerMinute} ");
-            while (_tokensUsedThisMinute + requiredTokens > _tokenPerMinute)
+            System.Diagnostics.Debug.WriteLine($"_tokensUsedThisMinute {_tokensUsedThisMinute} from _tokenLimitPerMinute {_tokenLimitPerMinute} ");
+            while (_tokensUsedThisMinute + requiredTokens > _tokenLimitPerMinute)
             {
-                System.Diagnostics.Debug.WriteLine($"Token Limit ");
-                var waitTime = _minuteStartTime.AddMinutes(1) - DateTime.UtcNow;
+                System.Diagnostics.Debug.WriteLine("Token Limit ");
+                var waitTime = _tokensCounterStartTime.AddMinutes(1) - DateTime.UtcNow;
                 if (waitTime.TotalMilliseconds > 0)
                 {
                     await Task.Delay(Math.Min((int)waitTime.TotalMilliseconds, 5000), cancellationToken).ConfigureAwait(false);
@@ -475,9 +416,9 @@ public class OpenAITranslator : TranslatorBase
 
                 // Reset after waiting period
                 now = DateTime.UtcNow;
-                if ((now - _minuteStartTime).TotalMinutes >= 1)
+                if ((now - _tokensCounterStartTime).TotalMinutes >= 1)
                 {
-                    _minuteStartTime = now;
+                    _tokensCounterStartTime = now;
                     _tokensUsedThisMinute = 0;
                 }
             }
@@ -486,5 +427,10 @@ public class OpenAITranslator : TranslatorBase
         {
             _rateLimitSemaphore.Release();
         }
+    }
+
+    public void Dispose()
+    {
+        _rateLimitSemaphore.Dispose();
     }
 }
