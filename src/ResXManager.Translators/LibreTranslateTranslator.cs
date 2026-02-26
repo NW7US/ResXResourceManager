@@ -137,7 +137,7 @@ public class LibreTranslateTranslator : TranslatorBase
                     break;
 
                 var result = await TranslateAsync(
-                    Url,
+                    new Uri(Url),
                     ApiKey,
                     RemoveKeyboardShortcutIndicators(item.Source),
                     translationSession.SourceLanguage,
@@ -167,10 +167,11 @@ public class LibreTranslateTranslator : TranslatorBase
     /// <param name="text">The text to translate.</param>
     /// <param name="sourceLanguage">The source language.</param>
     /// <param name="targetLanguage">The target language.</param>
+    /// <param name="alternatives">The preferred number of alternative translations.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The translated text.</returns>
     public static async Task<string[]?> TranslateAsync(
-        string url,
+        Uri url,
         string? apiKey,
         string text,
         CultureInfo sourceLanguage,
@@ -192,7 +193,7 @@ public class LibreTranslateTranslator : TranslatorBase
         var json = JsonConvert.SerializeObject(requestModel);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await httpClient.PostAsync(new Uri(url), content, cancellationToken).ConfigureAwait(false);
+        var response = await httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
 #pragma warning disable CA2016 // Forward the 'CancellationToken' parameter to methods => not available in NetFramework
@@ -213,7 +214,7 @@ public class LibreTranslateTranslator : TranslatorBase
             return null;
         }
 
-        return new[] { result.TranslatedText }.Concat(result.Alternatives ?? Array.Empty<string>()).ToArray();
+        return new[] { result.TranslatedText }.Concat(result.Alternatives ?? []).ToArray();
     }
 
     /// <summary>

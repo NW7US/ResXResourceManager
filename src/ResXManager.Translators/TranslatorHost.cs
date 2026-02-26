@@ -121,11 +121,11 @@ public sealed class TranslatorHost : IDisposable
     {
         foreach (var translator in translators)
         {
-            translator.PropertyChanged += (_, __) => SaveConfiguration();
+            translator.PropertyChanged += (_, _) => SaveConfiguration();
 
             foreach (var credential in translator.Credentials)
             {
-                credential.PropertyChanged += (_, __) => SaveConfiguration();
+                credential.PropertyChanged += (_, _) => SaveConfiguration();
             }
         }
     }

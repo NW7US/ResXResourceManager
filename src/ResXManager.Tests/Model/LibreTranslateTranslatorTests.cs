@@ -1,4 +1,6 @@
-﻿namespace ResXManager.Tests.Model;
+﻿#pragma warning disable CA2007
+
+namespace ResXManager.Tests.Model;
 
 using System;
 using System.Globalization;
@@ -14,7 +16,7 @@ public class LibreTranslateTranslatorTests
     [Fact]
     public void LibreTranslateParsesResponseCorrectly()
     {
-        const string input = "{\"translatedText\":\"¡Hola!\"}";
+        const string input = /*lang=json,strict*/ """{"translatedText":"¡Hola!"}""";
 
         var result = Translators.LibreTranslateTranslator.ParseResponse(input).First();
 
@@ -24,7 +26,7 @@ public class LibreTranslateTranslatorTests
     [Fact]
     public void LibreTranslateParsesResponseWithDetectedLanguageCorrectly()
     {
-        const string input = "{\"detectedLanguage\":{\"confidence\":90.0,\"language\":\"fr\"},\"translatedText\":\"Hello!\"}";
+        const string input = /*lang=json,strict*/ """{"detectedLanguage":{"confidence":90.0,"language":"fr"},"translatedText":"Hello!"}""";
 
         var result = Translators.LibreTranslateTranslator.ParseResponse(input).First();
 
@@ -44,7 +46,7 @@ public class LibreTranslateTranslatorTests
     [Fact]
     public void LibreTranslateParsesNullTranslatedTextCorrectly()
     {
-        const string input = "{\"translatedText\":null}";
+        const string input = /*lang=json,strict*/ """{"translatedText":null}""";
 
         var result = Translators.LibreTranslateTranslator.ParseResponse(input);
 
@@ -54,10 +56,11 @@ public class LibreTranslateTranslatorTests
     [Fact]
     public void LibreTranslateParsesResponseWithAlternativesCorrectly()
     {
-        const string input = "{\"translatedText\":\"Hi\",\"alternatives\":[\"Hello\",\"Hey\"]}";
+        const string input = /*lang=json,strict*/ """{"translatedText":"Hi","alternatives":["Hello","Hey"]}""";
 
         var result = Translators.LibreTranslateTranslator.ParseResponse(input);
 
+        Assert.NotNull(result);
         Assert.Equal(["Hi", "Hello", "Hey"], result);
     }
 
@@ -80,7 +83,7 @@ public class LibreTranslateTranslatorTests
         try
         {
             using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var response = await httpClient.GetAsync($"{LocalLibreUrl}/languages");
+            var response = await httpClient.GetAsync(new Uri($"{LocalLibreUrl}/languages"));
             return response.IsSuccessStatusCode;
         }
         catch
@@ -99,7 +102,7 @@ public class LibreTranslateTranslatorTests
         }
 
         var result = await Translators.LibreTranslateTranslator.TranslateAsync(
-            $"{LocalLibreUrl}/translate",
+            new Uri($"{LocalLibreUrl}/translate"),
             apiKey: null,
             text: "Good morning",
             sourceLanguage: CultureInfo.GetCultureInfo("en"),
@@ -129,7 +132,7 @@ public class LibreTranslateTranslatorTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await Translators.LibreTranslateTranslator.TranslateAsync(
-                LocalLibreUrl,
+                new Uri(LocalLibreUrl),
                 apiKey: null,
                 text: "Hello",
                 sourceLanguage: CultureInfo.GetCultureInfo("en"),

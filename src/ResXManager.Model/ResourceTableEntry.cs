@@ -333,7 +333,7 @@ public sealed class ResourceTableEntry : INotifyPropertyChanged, IDataErrorInfo
     }
 
     [DependsOn(nameof(Key))]
-    public bool IsDuplicateKey => _duplicateKeyExpression.Match(Key).Success;
+    public bool IsDuplicateKey => _duplicateKeyExpression.IsMatch(Key);
 
     public ReadOnlyCollection<CodeReference>? CodeReferences { get; set; }
 
@@ -377,7 +377,7 @@ public sealed class ResourceTableEntry : INotifyPropertyChanged, IDataErrorInfo
         var neutralValue = Values.GetValue(null);
         var values = cultures.Select(CultureKey.Parse)
             .Where(lang => !lang.IsNeutral)
-            .Select(lang => Values.GetValue(lang))
+            .Select(Values.GetValue)
             .Where(value => !value.IsNullOrEmpty())
             .ToList()
             .AsReadOnly();
@@ -437,7 +437,7 @@ public sealed class ResourceTableEntry : INotifyPropertyChanged, IDataErrorInfo
         OnPropertyChanged(nameof(TranslationState));
     }
 
-    private ICollection<string> GetValueAnnotations(ResourceLanguage language)
+    private string[] GetValueAnnotations(ResourceLanguage language)
     {
         var cultureKey = language.CultureKey;
 
@@ -506,7 +506,7 @@ public sealed class ResourceTableEntry : INotifyPropertyChanged, IDataErrorInfo
             yield return Resources.ResourceTableEntry_Error_InvariantWithValue;
     }
 
-    private ICollection<string> GetCommentAnnotations(ResourceLanguage language)
+    private string[] GetCommentAnnotations(ResourceLanguage language)
     {
         return GetSnapshotDifferences(language, Comments.GetValue(language.CultureKey), d => d?.Comment)
             .ToArray();
