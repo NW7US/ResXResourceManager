@@ -20,12 +20,10 @@
     <PackageReference Include="AutoProperties.Fody" PrivateAssets="all" />
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="Fody" PrivateAssets="all" />
-    <PackageReference Include="Newtonsoft.Json" VersionOverride="[9.0.1]" Justification="VS2019" />
     <PackageReference Include="PropertyChanged.Fody" PrivateAssets="all" />
     <PackageReference Include="System.ComponentModel.Annotations" />
     <PackageReference Include="System.Composition.AttributedModel" />
     <PackageReference Include="Throttle.Fody" PrivateAssets="all" />
-    <PackageReference Include="TomsToolbox.Composition" />
     <PackageReference Include="TomsToolbox.ObservableCollections" />
   </ItemGroup>
 </Project>

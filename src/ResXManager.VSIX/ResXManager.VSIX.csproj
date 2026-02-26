@@ -71,7 +71,6 @@
   <ItemGroup>
     <PackageReference Include="AutoProperties.Fody" PrivateAssets="all" />
     <PackageReference Include="Community.VisualStudio.Toolkit" />
-    <PackageReference Include="DataGridExtensions" />
     <PackageReference Include="Fody" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.SDK" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" PrivateAssets="all" />
@@ -79,9 +78,6 @@
     <PackageReference Include="Resourcer.Fody" PrivateAssets="all" />
     <PackageReference Include="Throttle.Fody" PrivateAssets="all" />
     <PackageReference Include="TomsToolbox.Composition.Ninject" />
-    <PackageReference Include="TomsToolbox.Wpf.Composition" />
-    <PackageReference Include="TomsToolbox.Wpf.Composition.AttributedModel" />
-    <PackageReference Include="TomsToolbox.Wpf.Styles" />
     <PackageReference Include="VSIX-SdkProjectAdapter" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
