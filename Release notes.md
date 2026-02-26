@@ -1,4 +1,9 @@
-﻿1.103:
+﻿1.104:
+- Fix #736: "Move to Resource" does not work at the end of the string literal
+- Implemented Translator for LibreTranslate (#739)
+- Use Serbian flag for neutral cultures (sr, Sr-Cyrl, sr-Latn) (#740)
+
+1.103:
 - Fix #731: Support language representation as LCID used by PFC projects (#734)
 - Adjustments to the Translation API for OpenAI (#730) Co-authored-by: Klemens Körner <klemens.koerner@sentech.de>
 
