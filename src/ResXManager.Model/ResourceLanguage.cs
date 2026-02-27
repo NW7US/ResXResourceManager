@@ -21,11 +21,13 @@ using TomsToolbox.Essentials;
 public class ResourceLanguage
 {
     private const string Quote = "\"";
-    private const string WinFormsMemberNamePrefix = @">>";
-    private static readonly XName _spaceAttributeName = XNamespace.Xml.GetName(@"space");
-    private static readonly XName _typeAttributeName = XNamespace.None.GetName(@"type");
-    private static readonly XName _mimetypeAttributeName = XNamespace.None.GetName(@"mimetype");
-    private static readonly XName _nameAttributeName = XNamespace.None.GetName(@"name");
+    private const string WinFormsMemberNamePrefix = ">>";
+    private const string NullValueTypeName = "System.Resources.ResXNullRef, System.Windows.Forms";
+
+    private static readonly XName _spaceAttributeName = XNamespace.Xml.GetName("space");
+    private static readonly XName _typeAttributeName = XNamespace.None.GetName("type");
+    private static readonly XName _mimetypeAttributeName = XNamespace.None.GetName("mimetype");
+    private static readonly XName _nameAttributeName = XNamespace.None.GetName("name");
 
     private readonly XDocument _document;
 
@@ -68,9 +70,9 @@ public class ResourceLanguage
 
         var defaultNamespace = DocumentRoot.GetDefaultNamespace();
 
-        _dataNodeName = defaultNamespace.GetName(@"data");
-        _valueNodeName = defaultNamespace.GetName(@"value");
-        _commentNodeName = defaultNamespace.GetName(@"comment");
+        _dataNodeName = defaultNamespace.GetName("data");
+        _valueNodeName = defaultNamespace.GetName("value");
+        _commentNodeName = defaultNamespace.GetName("comment");
 
         UpdateNodes(duplicateKeyHandling);
     }
@@ -101,7 +103,7 @@ public class ResourceLanguage
         }
         catch (ArgumentException ex)
         {
-            var duplicateKeys = string.Join(@", ", elements.GroupBy(item => item.Key).Where(group => group.Count() > 1).Select(group => Quote + group.Key + Quote));
+            var duplicateKeys = string.Join(", ", elements.GroupBy(item => item.Key).Where(group => group.Count() > 1).Select(group => Quote + group.Key + Quote));
             throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Resources.DuplicateKeyError, ProjectFile.FilePath, duplicateKeys), ex);
         }
     }
@@ -140,10 +142,10 @@ public class ResourceLanguage
     private static bool IsStringType(XElement entry)
     {
         var typeAttribute = entry.Attribute(_typeAttributeName);
-
         if (typeAttribute != null)
         {
-            return string.IsNullOrEmpty(typeAttribute.Value) || typeAttribute.Value.StartsWith(nameof(String), StringComparison.OrdinalIgnoreCase);
+            var typeAttributeValue = typeAttribute.Value;
+            return string.IsNullOrEmpty(typeAttributeValue) || typeAttributeValue.StartsWith(nameof(String), StringComparison.OrdinalIgnoreCase) || typeAttributeValue.Equals(NullValueTypeName, StringComparison.Ordinal);
         }
 
         var mimeTypeAttribute = entry.Attribute(_mimetypeAttributeName);
@@ -316,12 +318,21 @@ public class ResourceLanguage
 
             updateCallback(node);
 
-            if (!IsNeutralLanguage)
+            node.Element.SetAttributeValue(_typeAttributeName, null);
+
+            if (string.IsNullOrEmpty(node.Text))
             {
-                if (_configuration.RemoveEmptyEntries && string.IsNullOrEmpty(node.Text) && string.IsNullOrEmpty(node.Comment))
+                if (!IsNeutralLanguage)
                 {
-                    node.Element.Remove();
-                    _nodes.Remove(key);
+                    if (_configuration.RemoveEmptyEntries && string.IsNullOrEmpty(node.Comment))
+                    {
+                        node.Element.Remove();
+                        _nodes.Remove(key);
+                    }
+                    else
+                    {
+                        node.Element.SetAttributeValue(_typeAttributeName, NullValueTypeName);
+                    }
                 }
             }
 
@@ -339,7 +350,7 @@ public class ResourceLanguage
         var content = new XElement(_valueNodeName);
         content.Add(new XText(string.Empty));
 
-        var entry = new XElement(_dataNodeName, new XAttribute(_nameAttributeName, key), new XAttribute(_spaceAttributeName, @"preserve"));
+        var entry = new XElement(_dataNodeName, new XAttribute(_nameAttributeName, key), new XAttribute(_spaceAttributeName, "preserve"));
         entry.Add(content, new XText("\n  "));
 
         var fileContentSorting = _configuration.EffectiveResXSortingComparison;
