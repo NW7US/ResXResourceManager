@@ -1,10 +1,11 @@
-namespace ResXManager.Tests;
+﻿namespace ResXManager.Tests;
 
 using System.Globalization;
 using System.Linq;
 
 using ResXManager.Infrastructure;
 using ResXManager.Model;
+using ResXManager.Tests.Properties;
 
 using Xunit;
 
@@ -76,8 +77,8 @@ public class UnitTest1
     [Fact]
     public void StringConcatBehavior()
     {
-        const string? s1 = default;
-        const string? s2 = default;
+        const string? s1 = null;
+        const string? s2 = null;
         const string s3 = "Test";
 
 #pragma warning disable xUnit2000 // Constants and literals should be the expected argument
@@ -85,5 +86,22 @@ public class UnitTest1
 #pragma warning restore xUnit2000 // Constants and literals should be the expected argument
         Assert.Equal(s3, s1 + s3);
         Assert.Equal(s3, s1 + s3 + s2);
+    }
+
+    [Fact]
+    public void CultureSpecificInvariant()
+    {
+        Resources.Culture = new("en-US");
+        var invariantNeutral = Resources.Invariant1;
+        Assert.Equal("Invariant Neutral", invariantNeutral);
+
+        // German resource has the @invariant tag in the comment, and a null value, so it should fall back to the invariant resource.
+        Resources.Culture = new("de-DE");
+        var invariantGerman = Resources.Invariant1;
+        Assert.Equal("Invariant Neutral", invariantGerman);
+
+        Resources.Culture = new("zh-Hans");
+        var invariantChinese = Resources.Invariant1;
+        Assert.Equal("Invariant Chinese", invariantChinese);
     }
 }

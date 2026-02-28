@@ -22,12 +22,15 @@ public class ResourceLanguage
 {
     private const string Quote = "\"";
     private const string WinFormsMemberNamePrefix = ">>";
-    private const string NullValueTypeName = "System.Resources.ResXNullRef, System.Windows.Forms";
+    private const string WinFormsAssemblyAlias = "System.Windows.Forms";
+    private const string WinFormsAssemblyName = "System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+    private const string NullValueTypeName = $"System.Resources.ResXNullRef, {WinFormsAssemblyAlias}";
 
     private static readonly XName _spaceAttributeName = XNamespace.Xml.GetName("space");
     private static readonly XName _typeAttributeName = XNamespace.None.GetName("type");
     private static readonly XName _mimetypeAttributeName = XNamespace.None.GetName("mimetype");
     private static readonly XName _nameAttributeName = XNamespace.None.GetName("name");
+    private static readonly XName _aliasAttributeName = XNamespace.None.GetName("alias");
 
     private readonly XDocument _document;
 
@@ -38,6 +41,7 @@ public class ResourceLanguage
     private readonly XName _dataNodeName;
     private readonly XName _valueNodeName;
     private readonly XName _commentNodeName;
+    private readonly XName _assemblyNodeName;
 
     private readonly IConfiguration _configuration;
 
@@ -73,6 +77,7 @@ public class ResourceLanguage
         _dataNodeName = defaultNamespace.GetName("data");
         _valueNodeName = defaultNamespace.GetName("value");
         _commentNodeName = defaultNamespace.GetName("comment");
+        _assemblyNodeName = defaultNamespace.GetName("assembly");
 
         UpdateNodes(duplicateKeyHandling);
     }
@@ -318,7 +323,9 @@ public class ResourceLanguage
 
             updateCallback(node);
 
-            node.Element.SetAttributeValue(_typeAttributeName, null);
+            var dataElement = node.Element;
+
+            dataElement.SetAttributeValue(_typeAttributeName, null);
 
             if (string.IsNullOrEmpty(node.Text))
             {
@@ -326,12 +333,32 @@ public class ResourceLanguage
                 {
                     if (_configuration.RemoveEmptyEntries && string.IsNullOrEmpty(node.Comment))
                     {
-                        node.Element.Remove();
+                        dataElement.Remove();
                         _nodes.Remove(key);
                     }
                     else
                     {
-                        node.Element.SetAttributeValue(_typeAttributeName, NullValueTypeName);
+                        var rootElement = DocumentRoot;
+
+                        // Ensure that the assembly alias for WinForms is present, otherwise the compiler will not be able to compile the resource file 
+                        bool hasWinFormsAssemblyAlias = rootElement.Elements(_assemblyNodeName).Any(item => string.Equals(item.Attribute(_aliasAttributeName)?.Value, WinFormsAssemblyAlias, StringComparison.Ordinal));
+                        if (!hasWinFormsAssemblyAlias)
+                        {
+                            var firstDataElement = rootElement.Element(_dataNodeName);
+                            var assemblyAliasElement = new XElement(_assemblyNodeName, new XAttribute(_aliasAttributeName, WinFormsAssemblyAlias), new XAttribute(_nameAttributeName, WinFormsAssemblyName));
+
+                            if (firstDataElement != null)
+                            {
+                                firstDataElement.AddBeforeSelf(assemblyAliasElement);
+                            }
+                            else
+                            {
+                                rootElement.Add(assemblyAliasElement);
+                            }
+                        }
+
+                        // Set the type of the empty value to ResXNullRef, otherwise it will be treated as an empty string, which is not the same
+                        dataElement.SetAttributeValue(_typeAttributeName, NullValueTypeName);
                     }
                 }
             }

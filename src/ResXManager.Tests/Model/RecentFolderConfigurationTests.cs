@@ -10,7 +10,7 @@ using Xunit;
 #pragma warning disable CA1707 // Identifiers should not contain underscores
 #pragma warning disable CA1034 // Nested types should not be visible
 
-using static Properties.Settings;
+using static ResXManager.Properties.Settings;
 
 public static class RecentFolderConfigurationTests
 {

@@ -2,7 +2,7 @@
 
   <ItemGroup>
 
-    <Compile Update="Properties\Resources.Designer.cs" Condition="Exists('Properties\Resources.Designer.cs')">
+    <Compile Update="Properties\Resources.Designer.cs" Condition="Exists('Properties\Resources.Designer.cs') AND Exists('Properties\Resources.Designer.tt')">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.Designer.tt</DependentUpon>
